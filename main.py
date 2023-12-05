@@ -6,6 +6,20 @@ from pathlib import Path
 import cv2
 import itertools
 from collections import defaultdict
+'''
+Hamming Distance - take two strings, compare differences. 
+Equal image = 0 count (differences between scaled down images).
+Usually around <5 indicates a duplicate/similar image but slightly modified. 
+
+
+Hamming Distance no hash, I still do hash, sort of.
+Convert image to grayscale, transforms down to 8x8, then compare.
+
+aHash - average hash. 
+Convert to grayscale, 8x8, average all pixel's colour,
+use this average to convert image to 0 and 1's (below or above average). 
+'''
+
 #Take a list of images
 #Maintain two lists of images
 #1st list - Original images and a list of resized images used in hamming distance
@@ -23,40 +37,13 @@ from collections import defaultdict
 
 #Makes more sense to have an original table then a seperate table for each algorithm.
 
-def hamming_distance(image1, image2):
-    #Convert to strings
-
-    #image_length
-
-    #use itertools.combinations(dict, 2) to save computation. 
-    #a, b, c, d, e   ab ac ad ae  avoid-> ba bc de instead-> bc bd be aka use itertools.combinations
-
-    return
-
-def rgb_to_grey(image):
-    return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-def get_image_data(file, max_size=(400, 300)):
-    """
-    Generate image data using PIL
-    """
-    img = Image.open(file)
-    img.thumbnail(max_size)
-    bio = io.BytesIO()
-    img.save(bio, format="PNG")
-    return bio.getvalue()
-
-def get_cv2_image(image_path):
-    try:
-        image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        return image
-    except Exception as e:
-        print(f'Error loading image: {e}\nFilepath: {image_path}')
-        return 'rut roh' #Return a blank error message later
-
 def define_window_layout():
-    # Define the layout for the window
+    '''
+    define_window_layout creates PySimpleGui window and layout.
+
+    :return: A PySimpleGui.Window 
+    '''
+    #Define the layout for the window
     tree_layout = [
         [
             sg.Tree(data=sg.TreeData(), headings=['Size', 'Dimensions', 'File Name'], 
@@ -65,20 +52,20 @@ def define_window_layout():
         ]
     ]
 
-    # Preview column layout
+    #Preview column layout
     preview_layout = [
         [sg.Text('Image Preview')],
         [sg.Image(key='-IMAGE-', size=(400, 300))]  # Placeholder for the image preview
     ]
 
-    # Combine the tree and the preview into a single row
+    #Combine the tree and the preview into a single row
     combined_layout = [
         sg.Column(tree_layout),
         sg.VSeperator(),
         sg.Column(preview_layout, element_justification='center')
     ]
 
-    # Update the main layout to include the combined layout
+    #Update the main layout to include the combined layout
     layout = [
         [
             sg.Text('Included Directories'),
@@ -96,11 +83,11 @@ def define_window_layout():
         ],
         [
             sg.Text('Resize algorithm'),
-            sg.Combo(['Hamming Distance No Hash', 'Bilinear', 'Bicubic'], default_value='Hamming Distance No Hash', key='-RESIZE-'),
+            sg.Combo(['Hamming Distance No Hash', 'Hamming Distance',], default_value='Hamming Distance No Hash', key='-RESIZE-'),
             sg.Text('Hash size'),
-            sg.Spin([i for i in range(1, 33)], initial_value=16, key='-HASHSIZE-'),
+            sg.Spin([i for i in range(1, 33)], initial_value=8, key='-HASHSIZE-'),
             sg.Text('Hash type'),
-            sg.Combo(['Gradient', 'Blockhash'], default_value='Gradient', key='-HASHTYPE-'),
+            sg.Combo(['aHash', 'pHash', 'dHash'], default_value='Gradient', key='-HASHTYPE-'),
             sg.Checkbox('Ignore same size', default=True, key='-IGNORESIZE-'),
             sg.Button('Run Algorithm', expand_x=True),
         ],
@@ -108,7 +95,7 @@ def define_window_layout():
             sg.Text('Similarity'),
             sg.Slider(range=(0, 100), orientation='h', size=(20, 15), default_value=30, key='-SIMILARITY-')
         ],
-        combined_layout,  # Insert the combined layout here
+        combined_layout,  #Insert the combined layout here
         [
             sg.Button('Search', expand_x=True), sg.Button('Select', expand_x=True),
             sg.Button('Sort', expand_x=True), sg.Button('Compare', expand_x=True),
@@ -116,34 +103,127 @@ def define_window_layout():
         ]
     ]
 
-    # Create the Window with specified size
+    #Create the Window with specified size
     return sg.Window('File Management System', layout, resizable=True)
 
-def resize(image, height=8, width=8):
-    flattened = cv2.resize(image,(height, width), interpolation = cv2.INTER_AREA).flatten()
+def save_image(filename, directory_path, image):
+    print(f"Saving image: {filename} to directory: {directory_path}")
+    os.chdir(directory_path)
+    resized = cv2.resize(image,(640, 640), interpolation = cv2.INTER_NEAREST)
+    cv2.imwrite(filename, resized)
+
+def save_dictionary_images(dictionary_images):
+    for key, value in dictionary_images.items():
+        save_image(value)
+
+def rgb_to_grey(image):
+    """
+    rgb_to_grey Converts RGB numpy.ndarray to a grey numpy.ndarray.
+
+    :param image: The numpy.ndarray image 
+    :return: Grey image, numpy.ndarray
+    """
+    return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+def get_image_data(file_path, max_size=(400, 300)):
+    '''
+    get_image_data Opens an image from given a file_path,
+    then resizes it, and returns the bytes.
+
+    :param file_path: The path of the image to load. 
+    :param max_size: The maximum size of an image to return.
+    :return: The binary contents of the image, PNG file.
+    '''
+    try: 
+        img = Image.open(file_path) #Opens file, doesn't load into memory, returns ~PIL.Image.Image
+        img.thumbnail(max_size)
+        bio = io.BytesIO() #In-memory binary stream. 
+        img.save(bio, format="PNG") #Saves the image to the BytesIO object, bio now contains the binary data of the PNG image
+        return bio.getvalue() #Returns the binary content of bio.
+    except Exception as e:
+        print(f'There was an error loading the image to display, error: {e}')
+        return 'rut roh' #Return a blank error message later
+
+def get_cv2_image(image_path):
+    '''
+    get_cv2_image Reads the image given a image_path.
+
+    :param image_path: The path of the image to load
+    :return: An image as a numpy.ndarray. 
+    '''
+    try:
+        image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return image
+    except Exception as e:
+        print(f'Error loading image: {e}\nFilepath: {image_path}')
+        return 'rut roh' #Return a blank error message later
+
+def resize_flatten(image, filename, height=8, width=8):
+    '''
+    resize resizes an image given a height and width.
+
+    :param image: An image in cv2 format
+    :param height: Default 8, int determine's height of resized image 
+    :param width: Default 8, int determine's width of resized image
+    :return: Resized image as a numpy.ndarray
+    '''
+    resized = cv2.resize(image,(height, width), interpolation = cv2.INTER_AREA)
+
+    cwd = os.getcwd()
+    save_image(os.path.basename(filename), cwd+'/resized-8x8', resized)
+    os.chdir(cwd)
+    flattened = resized.flatten()
     print(f'Flattened: {flattened.shape}')
+    print(type(flattened))
     #flattened_column = cv2.resize(image,(height, width), interpolation = cv2.INTER_AREA).flatten('F')
     return flattened
 
 def hamming_distance(image, image1):
-    #count = 0
-    #for index, pixel_value in enumerate(image): 
-    #    if pixel_value != image1[index]:
-    #        count += 1
+    '''
+    hamming_distance Calculates the hamming distance given two images (lists).
+
+    :param image: The first image 
+    :param image1: The second image
+    :return: The hamming distance (a integer that represents how many differences were found in the list)
+    '''
     print(f'Length: {len(image)}')
     print(f'Length1: {len(image1)}')
     count = sum(1 for a, b in zip(image, image1) if a != b)
     return count
-#Change image_list to a dictionary with the original filenames
-#So when they are returned it will be easy to show what pictures are
-def hamming_distance_naive(image_list, threshold=10):
+
+#image_list -> Dict key=file_name_with_path value=flattened pixel values
+def hamming_distance_naive(image_dictionary, threshold=10):
+    '''
+    hamming_distance_naive Calculates the hamming distance of every pair of images.
+
+    :param image_list: A dictionary containing, key=file name with path, value=image, flattened numpy.ndarray.
+    :param threshold: The hamming distance threshold value. < threshold means duplicate.
+    :return: A dictionary containing the complete file paths of the duplicate images.  
+    '''
     dict_duplicates = defaultdict(list)
-    for k1, k2, in itertools.combinations(image_list, 2):
-        print(f'{k1}, {k2}, value: {hamming_distance(image_list[k1], image_list[k2])}')
-        if hamming_distance(image_list[k1], image_list[k2]) < threshold:
+    for k1, k2, in itertools.combinations(image_dictionary, 2):
+        print(f'{k1}, {k2}, value: {hamming_distance(image_dictionary[k1], image_dictionary[k2])}')
+        if hamming_distance(image_dictionary[k1], image_dictionary[k2]) < threshold:
             dict_duplicates[k1] = k2
 
     return dict_duplicates
+
+def average_hash(image_dictionary):
+    image_dictionary_averaged = {}
+    for key, value in image_dictionary.items():
+        #calculate average colour for image
+        sum = 0
+        image_length = value.size
+        number_of_pixels = image_length
+        for pixel in value: 
+            sum += pixel
+        average_colour = sum//number_of_pixels
+        #value.flatten()
+        value = value > average_colour
+        image_dictionary_averaged[key] = value
+    return image_dictionary_averaged
+
 
 def main():
     window = define_window_layout()
@@ -176,12 +256,21 @@ def main():
                     black_white_resized_images = {}
                     for key, value in image_file_names.items():
                         temp_image = (rgb_to_grey(value))
-                        black_white_resized_images[key] = (resize(temp_image))
+                        black_white_resized_images[key] = (resize_flatten(temp_image, key))
                     dict_list = hamming_distance_naive(black_white_resized_images)
 
                     print(dict_list)
 
                     print('sneed')
+                elif algorithm == "Hamming Distance":
+                    black_white_resized_images = {}
+                    for key, value in image_file_names.items():
+                        temp_image = (rgb_to_grey(value))
+                        black_white_resized_images[key] = (resize_flatten(temp_image, key))
+                    images_averaged_hash_dict = average_hash(black_white_resized_images)
+                    dict_list = hamming_distance_naive(images_averaged_hash_dict)
+                    print(dict_list)
+                    
             else: 
                 print('Error running algorithm, file list must not be empty!')
         elif event == 'Search':

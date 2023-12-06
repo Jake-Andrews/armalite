@@ -71,7 +71,7 @@ def define_window_layout():
     tab4 = sg.Tab('Duplicate Images', tree_layout4)
 
     # Group tabs together
-    tab_group = sg.TabGroup([[tab1, tab2, tab3]])
+    tab_group = sg.TabGroup([[tab1, tab2, tab3, tab4]])
 
     # Combine the tab group and the preview into a single row
     combined_layout = [
@@ -107,8 +107,8 @@ def define_window_layout():
             sg.Button('Run Algorithm', expand_x=True),
         ],
         [
-            sg.Text('Similarity'),
-            sg.Slider(range=(0, 100), orientation='h', size=(20, 15), default_value=30, key='-SIMILARITY-')
+            sg.Button('Clear Intermediate Tabs', ),
+            sg.Button('Clear All Tabs')
         ],
         combined_layout,  #Insert the combined layout here
         [
@@ -268,10 +268,20 @@ def main():
 
         if event == '-TREE1-': #Event triggered when an item in the tree is clicked
             load_image(1)
-        if event == '-TREE2-': 
+        elif event == '-TREE2-': 
             load_image(2)
-        if event == '-TREE3-':
+        elif event == '-TREE3-':
             load_image(3)
+        elif event == '-TREE4-':
+            load_image(4)
+
+        elif event == 'Clear Intermediate Tabs':
+            for i in range(2,5):
+                window[f'-TREE{i}-'].update(values=sg.TreeData())
+        elif event == 'Clear All Tabs':
+            for i in range(1,5):
+                window[f'-TREE{i}-'].update(values=sg.TreeData())
+            image_file_names = {}
 
         elif event == 'Run Algorithm':
             algorithm = values['-RESIZE-']
@@ -286,6 +296,8 @@ def main():
                     
                     dict_list = hamming_distance_naive(black_white_resized_images)
                     print(dict_list)
+                    tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
+                    window['-TREE4-'].update(values=tree_data_2)
 
                 elif algorithm == "Hamming Distance":
                     black_white_resized_images = black_white_resize_images(image_file_names)
@@ -300,11 +312,14 @@ def main():
                     new_temp_rounded_dict = {k:(np.uint8(v) * 255).reshape((hash_size,hash_size)) for k, v in images_averaged_hash_dict.items()}
                     #Save the averaged hash images, then display them in a tab
                     save_image_folder(new_temp_rounded_dict, '/average_hash-8x8')
-                    tree_data = prepare_image_dict_for_tree(new_temp_rounded_dict, 'average_hash-8x8')
-                    window['-TREE3-'].update(values=tree_data)
+                    tree_data_1 = prepare_image_dict_for_tree(new_temp_rounded_dict, 'average_hash-8x8')
+                    window['-TREE3-'].update(values=tree_data_1)
 
                     dict_list = hamming_distance_naive(images_averaged_hash_dict)
                     print(dict_list)
+                    tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
+                    print(f"TreeLdata: {tree_data_2}")
+                    window['-TREE4-'].update(values=tree_data_2)
                     
             else: 
                 print('Error running algorithm, file list must not be empty!')
@@ -314,16 +329,17 @@ def main():
             folder = values['-FOLDER-']
             #Grab images from folders, then load the images into dict
             file_names = search_directory(folder, recursive)
-            for file_name in file_names: 
-                image_file_names[file_name] = get_cv2_image(file_name)
-
-            #Prepare data for the tree
-            tree_data = prepare_image_dict_for_tree(image_file_names)
-            window['-TREE1-'].update(values=tree_data)
+            if file_names:
+                for file_name in file_names: 
+                    image_file_names[file_name] = get_cv2_image(file_name)
+                #Prepare data for the tree
+                tree_data = prepare_image_dict_for_tree(image_file_names)
+                window['-TREE1-'].update(values=tree_data)
+            else: print("Please enter a valid directory!")
 
     window.close()
 
-def prepare_image_dict_for_tree(image_dictionary, insert_directory=''):
+def prepare_image_dict_for_tree(image_dictionary, insert_directory='', spacing=False):
     #Prepare data for the tree
     print(insert_directory)
     tree_data = sg.TreeData()
@@ -340,8 +356,28 @@ def prepare_image_dict_for_tree(image_dictionary, insert_directory=''):
             print(new_path)
             tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', new_path])        
     else:
-        for index, (key, value) in enumerate(image_dictionary.items()):
-            tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', key])
+        index = 0
+        for key, value in image_dictionary.items():
+            print(f"key: {key}, value: {value}")
+            #in this case image_dictionary is defaultdict. key=filename, value=filename list. 
+            if type(value) == list and spacing==True:
+                #First row is the key (image used to compare against others)
+                image = get_cv2_image(key) 
+                tree_data.insert('', index, '', values=[getsizeof(image), f'{image.shape[:1]} x {image.shape[1:2]}', key])
+                index += 1
+                #Next rows are the values (images detected to be duplicates of the above)
+                for filename in value:
+                    image = get_cv2_image(filename) 
+                    tree_data.insert('', index, '', values=[getsizeof(image), f'{image.shape[:1]} x {image.shape[1:2]}', filename])
+                    index += 1
+                #create blank row to seperate duplicate images visually
+                tree_data.insert('', index, '', values=['', '', ''])
+                index += 1
+
+            #image_dictionary is normal dict. key=filename, value=image (numpy array)
+            else: 
+                tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', key])
+                index += 1
     return tree_data
 
 def search_directory(directory, recursive):
@@ -352,6 +388,9 @@ def search_directory(directory, recursive):
     :param recursive: (boolean) True if recursively finding all filenames, false otherwise  
     :return: A list with the absolute paths of all picture files from the given directory, recursively or not. 
     '''
+    if not directory:
+        return ''
+    
     file_names = []
     if recursive:
         try:
@@ -362,8 +401,8 @@ def search_directory(directory, recursive):
         except Exception as e: 
             print(f"There was an error searching the directory, error: {e}")
     else:
-        file_list = os.listdir(directory)
         try:
+            file_list = os.listdir(directory)
             # Get list of files and create dictionary 
             file_names = [
                 os.path.join(directory, f) for f in file_list

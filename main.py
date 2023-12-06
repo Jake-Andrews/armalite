@@ -6,6 +6,7 @@ from pathlib import Path
 import cv2
 import itertools
 from collections import defaultdict
+import numpy as np
 '''
 Hamming Distance - take two strings, compare differences. 
 Equal image = 0 count (differences between scaled down images).
@@ -43,24 +44,35 @@ def define_window_layout():
 
     :return: A PySimpleGui.Window 
     '''
-    #Define the layout for the window
-    tree_layout = [
-        [
-            sg.Tree(data=sg.TreeData(), headings=['Size', 'Dimensions', 'File Name'], 
-                    auto_size_columns=False, num_rows=10, col0_width=100, key='-TREE-',
-                    enable_events=True)  # enable_events=True to trigger events when an item is clicked
+    def create_tree_layout(key_suffix):
+        return [
+            [sg.Tree(data=sg.TreeData(), headings=['Size', 'Dimensions', 'File Name'], 
+                    auto_size_columns=False, num_rows=10, col0_width=100, key=f'-TREE{key_suffix}-',
+                    enable_events=True)]
         ]
-    ]
 
-    #Preview column layout
+    # Create three separate tree layouts for each tab
+    tree_layout1 = create_tree_layout('1')
+    tree_layout2 = create_tree_layout('2')
+    tree_layout3 = create_tree_layout('3')
+
+    #Preview column layout (common for all tabs)
     preview_layout = [
         [sg.Text('Image Preview')],
-        [sg.Image(key='-IMAGE-', size=(400, 300))]  # Placeholder for the image preview
+        [sg.Image(key='-IMAGE-', size=(400, 300))]
     ]
 
-    #Combine the tree and the preview into a single row
+    # Tab definitions
+    tab1 = sg.Tab('Files', tree_layout1)
+    tab2 = sg.Tab('Resized Images', tree_layout2)
+    tab3 = sg.Tab('Hashed Image', tree_layout3)
+
+    # Group tabs together
+    tab_group = sg.TabGroup([[tab1, tab2, tab3]])
+
+    # Combine the tab group and the preview into a single row
     combined_layout = [
-        sg.Column(tree_layout),
+        sg.Column([[tab_group]]),
         sg.VSeperator(),
         sg.Column(preview_layout, element_justification='center')
     ]
@@ -159,7 +171,7 @@ def get_cv2_image(image_path):
         print(f'Error loading image: {e}\nFilepath: {image_path}')
         return 'rut roh' #Return a blank error message later
 
-def resize_flatten(image, filename, height=8, width=8):
+def resize(image, height=8, width=8):
     '''
     resize resizes an image given a height and width.
 
@@ -169,15 +181,7 @@ def resize_flatten(image, filename, height=8, width=8):
     :return: Resized image as a numpy.ndarray
     '''
     resized = cv2.resize(image,(height, width), interpolation = cv2.INTER_AREA)
-
-    cwd = os.getcwd()
-    save_image(os.path.basename(filename), cwd+'/resized-8x8', resized)
-    os.chdir(cwd)
-    flattened = resized.flatten()
-    print(f'Flattened: {flattened.shape}')
-    print(type(flattened))
-    #flattened_column = cv2.resize(image,(height, width), interpolation = cv2.INTER_AREA).flatten('F')
-    return flattened
+    return resized
 
 def hamming_distance(image, image1):
     '''
@@ -223,10 +227,23 @@ def average_hash(image_dictionary):
         image_dictionary_averaged[key] = value
     return image_dictionary_averaged
 
+def save_image_folder(image, filename, folder_name):
+    cwd = os.getcwd()
+    save_image(os.path.basename(filename), cwd+folder_name, image)
+    os.chdir(cwd)
+
+def black_white_resized_images(image_file_names):
+    black_white_resized_images = {}
+    for key, value in image_file_names.items():
+        temp_image = (rgb_to_grey(value))
+        temp = resize(temp_image)
+        black_white_resized_images[key] = temp.flatten()
+        save_image_folder(temp, key, '/resized-8x8')
+    return black_white_resized_images
 
 def main():
+    hash_size = 8
     window = define_window_layout()
-    file_names = []
     image_file_names = {}
 
     while True:
@@ -236,42 +253,36 @@ def main():
         
         if event == '-TREE-':  # Event triggered when an item in the tree is clicked
             try:
-                selected_file = window.Element('-TREE-').SelectedRows[0]  # Get the index of the selected row
-                #print(f'1: {selected_file}')
-                #print(f'2: {window.Element("-TREE-").TreeData}')
-                #print(f'3: {window.Element("-TREE-").TreeData.tree_dict[selected_file].values[1]}')
-                print(f'4: {window.Element("-TREE-").TreeData.tree_dict[selected_file].text}') 
-                #print(window.Element('-TREE-').TreeData.tree_dict[selected_file])
-                full_filename_path = window.Element("-TREE-").TreeData.tree_dict[selected_file].text # text property of row index
+                selected_file = window.Element('-TREE1-').SelectedRows[0]  # Get the index of the selected row
+                print(f'4: {window.Element("-TREE1-").TreeData.tree_dict[selected_file].text}') 
+                full_filename_path = window.Element("-TREE1-").TreeData.tree_dict[selected_file].text # text property of row index
                 path = Path(full_filename_path)
                 image_data = get_image_data(path)
                 window['-IMAGE-'].update(image_data)
             except Exception as e:
                 sg.popup_error('Error loading image:', e)
+
         elif event == 'Run Algorithm':
             algorithm = values['-RESIZE-']
             if image_file_names:
                 if algorithm == 'Hamming Distance No Hash':
-                    black_white_resized_images = {}
-                    for key, value in image_file_names.items():
-                        temp_image = (rgb_to_grey(value))
-                        black_white_resized_images[key] = (resize_flatten(temp_image, key))
+                    black_white_resized_images = black_white_resized_images(image_file_names)
                     dict_list = hamming_distance_naive(black_white_resized_images)
-
                     print(dict_list)
 
-                    print('sneed')
                 elif algorithm == "Hamming Distance":
-                    black_white_resized_images = {}
-                    for key, value in image_file_names.items():
-                        temp_image = (rgb_to_grey(value))
-                        black_white_resized_images[key] = (resize_flatten(temp_image, key))
+                    black_white_resized_images = black_white_resized_images(image_file_names)
                     images_averaged_hash_dict = average_hash(black_white_resized_images)
+                    for key, value in images_averaged_hash_dict.items(): #Saving average_hash images. np.uint8 turns true/false array into 0,1. *255 from 0-1 to 0-255.
+                        temp = np.uint8(value) * 255
+                        save_image_folder(temp.reshape((hash_size,hash_size)) , key, '/average_hash-8x8')
+
                     dict_list = hamming_distance_naive(images_averaged_hash_dict)
                     print(dict_list)
                     
             else: 
                 print('Error running algorithm, file list must not be empty!')
+
         elif event == 'Search':
             recursive = values['-RECURSIVE-']
             folder = values['-FOLDER-']
@@ -287,7 +298,7 @@ def main():
                 tree_data.insert('', index, key, values=[f'{value.shape[:1]} x {value.shape[1:2]}', key])
 
             # Update the tree with the images
-            window['-TREE-'].update(values=tree_data)
+            window['-TREE1-'].update(values=tree_data)
 
     window.close()
 

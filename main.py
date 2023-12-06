@@ -245,10 +245,21 @@ def black_white_resize_images(image_file_names):
         black_white_resized_images[key] = resize(temp_image)
     return black_white_resized_images
 
+def remove_all_files(path):
+   try:
+     files = os.listdir(path)
+     for file in files:
+       file_path = os.path.join(path, file)
+       if os.path.isfile(file_path):
+         os.remove(file_path)
+     print(f"All files deleted successfully from: {path}")
+   except Exception as e:
+     print(f"Error occurred while deleting files, Error: {e}")
+
 def main():
     hash_size = 8
     window = define_window_layout()
-    image_file_names = {}
+    image_file_names = {} 
 
     while True:
         event, values = window.read()
@@ -278,10 +289,14 @@ def main():
         elif event == 'Clear Intermediate Tabs':
             for i in range(2,5):
                 window[f'-TREE{i}-'].update(values=sg.TreeData())
+            remove_all_files("./resized-8x8")
+            remove_all_files("./average_hash-8x8")
         elif event == 'Clear All Tabs':
             for i in range(1,5):
                 window[f'-TREE{i}-'].update(values=sg.TreeData())
             image_file_names = {}
+            remove_all_files("./resized-8x8")
+            remove_all_files("./average_hash-8x8")
 
         elif event == 'Run Algorithm':
             algorithm = values['-RESIZE-']

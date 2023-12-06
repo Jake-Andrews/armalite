@@ -56,6 +56,7 @@ def define_window_layout():
     tree_layout1 = create_tree_layout('1')
     tree_layout2 = create_tree_layout('2')
     tree_layout3 = create_tree_layout('3')
+    tree_layout4 = create_tree_layout('4')
 
     #Preview column layout (common for all tabs)
     preview_layout = [
@@ -64,9 +65,10 @@ def define_window_layout():
     ]
 
     # Tab definitions
-    tab1 = sg.Tab('Files', tree_layout1)
+    tab1 = sg.Tab('Images', tree_layout1)
     tab2 = sg.Tab('Resized Images', tree_layout2)
-    tab3 = sg.Tab('Hashed Image', tree_layout3)
+    tab3 = sg.Tab('Hashed Images', tree_layout3)
+    tab4 = sg.Tab('Duplicate Images', tree_layout4)
 
     # Group tabs together
     tab_group = sg.TabGroup([[tab1, tab2, tab3]])
@@ -252,37 +254,24 @@ def main():
         event, values = window.read()
         if event == sg.WIN_CLOSED:
             break
-        
+
+        def load_image(tree_number):
+            try:
+                selected_file = window.Element(f'-TREE{tree_number}-').SelectedRows[0] #Get the index of the selected row
+                print(f'4: {window.Element(f"-TREE{tree_number}-").TreeData.tree_dict[selected_file].values[2]}') 
+                full_filename_path = window.Element(f"-TREE{tree_number}-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
+                path = Path(full_filename_path)
+                image_data = get_image_data(path)
+                window['-IMAGE-'].update(image_data)
+            except Exception as e:
+                sg.popup_error('Error loading image:', e)
+
         if event == '-TREE1-': #Event triggered when an item in the tree is clicked
-            try:
-                selected_file = window.Element('-TREE1-').SelectedRows[0] #Get the index of the selected row
-                print(f'4: {window.Element("-TREE1-").TreeData.tree_dict[selected_file].values[2]}') 
-                full_filename_path = window.Element("-TREE1-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
-                path = Path(full_filename_path)
-                image_data = get_image_data(path)
-                window['-IMAGE-'].update(image_data)
-            except Exception as e:
-                sg.popup_error('Error loading image:', e)
-        if event == '-TREE2-': #Event triggered when an item in the tree is clicked
-            try:
-                selected_file = window.Element('-TREE2-').SelectedRows[0] #Get the index of the selected row
-                print(f'4: {window.Element("-TREE2-").TreeData.tree_dict[selected_file].values[2]}') 
-                full_filename_path = window.Element("-TREE2-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
-                path = Path(full_filename_path)
-                image_data = get_image_data(path)
-                window['-IMAGE-'].update(image_data)
-            except Exception as e:
-                sg.popup_error('Error loading image:', e)
-        if event == '-TREE3-': #Event triggered when an item in the tree is clicked
-            try:
-                selected_file = window.Element('-TREE3-').SelectedRows[0] #Get the index of the selected row
-                print(f'4: {window.Element("-TREE3-").TreeData.tree_dict[selected_file].values[2]}') 
-                full_filename_path = window.Element("-TREE3-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
-                path = Path(full_filename_path)
-                image_data = get_image_data(path)
-                window['-IMAGE-'].update(image_data)
-            except Exception as e:
-                sg.popup_error('Error loading image:', e)
+            load_image(1)
+        if event == '-TREE2-': 
+            load_image(2)
+        if event == '-TREE3-':
+            load_image(3)
 
         elif event == 'Run Algorithm':
             algorithm = values['-RESIZE-']
@@ -309,9 +298,6 @@ def main():
                     images_averaged_hash_dict = average_hash(black_white_resized_images)
 
                     new_temp_rounded_dict = {k:(np.uint8(v) * 255).reshape((hash_size,hash_size)) for k, v in images_averaged_hash_dict.items()}
-                    #for key, value in images_averaged_hash_dict.items(): #Saving average_hash images. np.uint8 turns true/false array into 0,1. *255 from 0-1 to 0-255.
-                    #    temp = np.uint8(value) * 255
-                    #    save_image_folder(temp.reshape((hash_size,hash_size)) , key, '/average_hash-8x8')
                     #Save the averaged hash images, then display them in a tab
                     save_image_folder(new_temp_rounded_dict, '/average_hash-8x8')
                     tree_data = prepare_image_dict_for_tree(new_temp_rounded_dict, 'average_hash-8x8')

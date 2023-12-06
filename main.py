@@ -2,11 +2,12 @@ import PySimpleGUI as sg
 import os
 from PIL import Image
 import io
-from pathlib import Path
+from pathlib import Path, PurePath
 import cv2
 import itertools
 from collections import defaultdict
 import numpy as np
+from sys import getsizeof
 '''
 Hamming Distance - take two strings, compare differences. 
 Equal image = 0 count (differences between scaled down images).
@@ -46,8 +47,8 @@ def define_window_layout():
     '''
     def create_tree_layout(key_suffix):
         return [
-            [sg.Tree(data=sg.TreeData(), headings=['Size', 'Dimensions', 'File Name'], 
-                    auto_size_columns=False, num_rows=10, col0_width=100, key=f'-TREE{key_suffix}-',
+            [sg.Tree(data=sg.TreeData(), headings=['Size (Bytes)', 'Dimensions', 'File Name'], 
+                    auto_size_columns=False, num_rows=10, col0_width=0, col_widths=[25,25,80], key=f'-TREE{key_suffix}-',
                     enable_events=True)]
         ]
 
@@ -201,44 +202,45 @@ def hamming_distance_naive(image_dictionary, threshold=10):
     '''
     hamming_distance_naive Calculates the hamming distance of every pair of images.
 
-    :param image_list: A dictionary containing, key=file name with path, value=image, flattened numpy.ndarray.
+    :param image_dictionary: A dictionary containing, key=filename with path, value=image, non-flattened numpy.ndarray.
     :param threshold: The hamming distance threshold value. < threshold means duplicate.
     :return: A dictionary containing the complete file paths of the duplicate images.  
     '''
     dict_duplicates = defaultdict(list)
     for k1, k2, in itertools.combinations(image_dictionary, 2):
-        print(f'{k1}, {k2}, value: {hamming_distance(image_dictionary[k1], image_dictionary[k2])}')
-        if hamming_distance(image_dictionary[k1], image_dictionary[k2]) < threshold:
-            dict_duplicates[k1] = k2
+        print(f'{k1}, {k2}, value: {hamming_distance(image_dictionary[k1].flatten(), image_dictionary[k2].flatten())}')
+        if hamming_distance(image_dictionary[k1].flatten(), image_dictionary[k2].flatten()) < threshold:
+            dict_duplicates[k1].append(k2)
 
     return dict_duplicates
 
 def average_hash(image_dictionary):
     image_dictionary_averaged = {}
     for key, value in image_dictionary.items():
-        #calculate average colour for image
+        #Calculate average colour for image
         sum = 0
+        value = value.flatten()
         image_length = value.size
         number_of_pixels = image_length
         for pixel in value: 
             sum += pixel
+        #Apply average colour mask (true if > avg colour, false otherwise)
         average_colour = sum//number_of_pixels
         value = value > average_colour
         image_dictionary_averaged[key] = value
     return image_dictionary_averaged
 
-def save_image_folder(image, filename, folder_name):
+def save_image_folder(black_white_resized_images_dict, folder_name):
     cwd = os.getcwd()
-    save_image(os.path.basename(filename), cwd+folder_name, image)
+    for filepath, image in black_white_resized_images_dict.items():
+        save_image(os.path.basename(filepath), cwd+folder_name, image)
     os.chdir(cwd)
 
-def black_white_resized_images(image_file_names):
+def black_white_resize_images(image_file_names):
     black_white_resized_images = {}
     for key, value in image_file_names.items():
         temp_image = (rgb_to_grey(value))
-        temp = resize(temp_image)
-        black_white_resized_images[key] = temp.flatten()
-        save_image_folder(temp, key, '/resized-8x8')
+        black_white_resized_images[key] = resize(temp_image)
     return black_white_resized_images
 
 def main():
@@ -251,11 +253,31 @@ def main():
         if event == sg.WIN_CLOSED:
             break
         
-        if event == '-TREE-':  # Event triggered when an item in the tree is clicked
+        if event == '-TREE1-': #Event triggered when an item in the tree is clicked
             try:
-                selected_file = window.Element('-TREE1-').SelectedRows[0]  # Get the index of the selected row
-                print(f'4: {window.Element("-TREE1-").TreeData.tree_dict[selected_file].text}') 
-                full_filename_path = window.Element("-TREE1-").TreeData.tree_dict[selected_file].text # text property of row index
+                selected_file = window.Element('-TREE1-').SelectedRows[0] #Get the index of the selected row
+                print(f'4: {window.Element("-TREE1-").TreeData.tree_dict[selected_file].values[2]}') 
+                full_filename_path = window.Element("-TREE1-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
+                path = Path(full_filename_path)
+                image_data = get_image_data(path)
+                window['-IMAGE-'].update(image_data)
+            except Exception as e:
+                sg.popup_error('Error loading image:', e)
+        if event == '-TREE2-': #Event triggered when an item in the tree is clicked
+            try:
+                selected_file = window.Element('-TREE2-').SelectedRows[0] #Get the index of the selected row
+                print(f'4: {window.Element("-TREE2-").TreeData.tree_dict[selected_file].values[2]}') 
+                full_filename_path = window.Element("-TREE2-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
+                path = Path(full_filename_path)
+                image_data = get_image_data(path)
+                window['-IMAGE-'].update(image_data)
+            except Exception as e:
+                sg.popup_error('Error loading image:', e)
+        if event == '-TREE3-': #Event triggered when an item in the tree is clicked
+            try:
+                selected_file = window.Element('-TREE3-').SelectedRows[0] #Get the index of the selected row
+                print(f'4: {window.Element("-TREE3-").TreeData.tree_dict[selected_file].values[2]}') 
+                full_filename_path = window.Element("-TREE3-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
                 path = Path(full_filename_path)
                 image_data = get_image_data(path)
                 window['-IMAGE-'].update(image_data)
@@ -266,16 +288,34 @@ def main():
             algorithm = values['-RESIZE-']
             if image_file_names:
                 if algorithm == 'Hamming Distance No Hash':
-                    black_white_resized_images = black_white_resized_images(image_file_names)
+                    black_white_resized_images = black_white_resize_images(image_file_names)
+                    
+                    #Save the resized black and white images, then display them in a tab
+                    save_image_folder(black_white_resized_images, '/resized-8x8')
+                    tree_data = prepare_image_dict_for_tree(black_white_resized_images, 'resized-8x8')
+                    window['-TREE2-'].update(values=tree_data)
+                    
                     dict_list = hamming_distance_naive(black_white_resized_images)
                     print(dict_list)
 
                 elif algorithm == "Hamming Distance":
-                    black_white_resized_images = black_white_resized_images(image_file_names)
+                    black_white_resized_images = black_white_resize_images(image_file_names)
+                    
+                    #Save the resized black and white images, then display them in a tab
+                    save_image_folder(black_white_resized_images, '/resized-8x8')
+                    tree_data = prepare_image_dict_for_tree(black_white_resized_images, 'resized-8x8')
+                    window['-TREE2-'].update(values=tree_data)
+                    
                     images_averaged_hash_dict = average_hash(black_white_resized_images)
-                    for key, value in images_averaged_hash_dict.items(): #Saving average_hash images. np.uint8 turns true/false array into 0,1. *255 from 0-1 to 0-255.
-                        temp = np.uint8(value) * 255
-                        save_image_folder(temp.reshape((hash_size,hash_size)) , key, '/average_hash-8x8')
+
+                    new_temp_rounded_dict = {k:(np.uint8(v) * 255).reshape((hash_size,hash_size)) for k, v in images_averaged_hash_dict.items()}
+                    #for key, value in images_averaged_hash_dict.items(): #Saving average_hash images. np.uint8 turns true/false array into 0,1. *255 from 0-1 to 0-255.
+                    #    temp = np.uint8(value) * 255
+                    #    save_image_folder(temp.reshape((hash_size,hash_size)) , key, '/average_hash-8x8')
+                    #Save the averaged hash images, then display them in a tab
+                    save_image_folder(new_temp_rounded_dict, '/average_hash-8x8')
+                    tree_data = prepare_image_dict_for_tree(new_temp_rounded_dict, 'average_hash-8x8')
+                    window['-TREE3-'].update(values=tree_data)
 
                     dict_list = hamming_distance_naive(images_averaged_hash_dict)
                     print(dict_list)
@@ -286,30 +326,46 @@ def main():
         elif event == 'Search':
             recursive = values['-RECURSIVE-']
             folder = values['-FOLDER-']
-
+            #Grab images from folders, then load the images into dict
             file_names = search_directory(folder, recursive)
             for file_name in file_names: 
                 image_file_names[file_name] = get_cv2_image(file_name)
 
-            # Prepare data for the tree
-            tree_data = sg.TreeData()
-            for index, (key, value) in enumerate(image_file_names.items()):
-                #print(index, key, value)
-                tree_data.insert('', index, key, values=[f'{value.shape[:1]} x {value.shape[1:2]}', key])
-
-            # Update the tree with the images
+            #Prepare data for the tree
+            tree_data = prepare_image_dict_for_tree(image_file_names)
             window['-TREE1-'].update(values=tree_data)
 
     window.close()
 
-'''
-search_directory Gets the absolute path of all picture files given a directory, recursively or not. 
+def prepare_image_dict_for_tree(image_dictionary, insert_directory=''):
+    #Prepare data for the tree
+    print(insert_directory)
+    tree_data = sg.TreeData()
+    #...:( 
+    if insert_directory:
+        for index, (key, value) in enumerate(image_dictionary.items()):
+            print(key)
+            temp = PurePath(key)
+            temp_parts = list(temp.parts)
+            print(temp_parts)
 
-:param directory: (string) The directory from which to get the picture files from 
-:param recursive: (boolean) True if recursively finding all filenames, false otherwise  
-:return: A list with the absolute paths of all picture files from the given directory, recursively or not. 
-'''
+            temp_parts.insert(-1, insert_directory)
+            new_path = PurePath('').joinpath(*temp_parts)
+            print(new_path)
+            tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', new_path])        
+    else:
+        for index, (key, value) in enumerate(image_dictionary.items()):
+            tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', key])
+    return tree_data
+
 def search_directory(directory, recursive):
+    '''
+    search_directory Gets the absolute path of all picture files given a directory, recursively or not. 
+
+    :param directory: (string) The directory from which to get the picture files from 
+    :param recursive: (boolean) True if recursively finding all filenames, false otherwise  
+    :return: A list with the absolute paths of all picture files from the given directory, recursively or not. 
+    '''
     file_names = []
     if recursive:
         try:

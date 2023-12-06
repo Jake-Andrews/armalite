@@ -88,7 +88,7 @@ def define_window_layout():
             sg.Spin([i for i in range(1, 33)], initial_value=8, key='-HASHSIZE-'),
             sg.Text('Hash type'),
             sg.Combo(['aHash', 'pHash', 'dHash'], default_value='Gradient', key='-HASHTYPE-'),
-            sg.Checkbox('Ignore same size', default=True, key='-IGNORESIZE-'),
+            sg.Checkbox('Search Directories Recursively', default=False, key='-RECURSIVE-'),
             sg.Button('Run Algorithm', expand_x=True),
         ],
         [
@@ -219,7 +219,6 @@ def average_hash(image_dictionary):
         for pixel in value: 
             sum += pixel
         average_colour = sum//number_of_pixels
-        #value.flatten()
         value = value > average_colour
         image_dictionary_averaged[key] = value
     return image_dictionary_averaged
@@ -274,16 +273,10 @@ def main():
             else: 
                 print('Error running algorithm, file list must not be empty!')
         elif event == 'Search':
+            recursive = values['-RECURSIVE-']
             folder = values['-FOLDER-']
-            try:
-                file_list = os.listdir(folder)
-            except:
-                file_list = []
-            # Get list of files and create dictionary 
-            file_names = [
-                os.path.join(folder, f) for f in file_list
-                if os.path.isfile(os.path.join(folder, f)) and f.lower().endswith(('.png', '.gif', '.jpg', '.jpeg', '.tiff', '.bmp'))
-            ]
+
+            file_names = search_directory(folder, recursive)
             for file_name in file_names: 
                 image_file_names[file_name] = get_cv2_image(file_name)
 
@@ -297,6 +290,36 @@ def main():
             window['-TREE-'].update(values=tree_data)
 
     window.close()
+
+'''
+search_directory Gets the absolute path of all picture files given a directory, recursively or not. 
+
+:param directory: (string) The directory from which to get the picture files from 
+:param recursive: (boolean) True if recursively finding all filenames, false otherwise  
+:return: A list with the absolute paths of all picture files from the given directory, recursively or not. 
+'''
+def search_directory(directory, recursive):
+    file_names = []
+    if recursive:
+        try:
+            for root, dirnames, files in os.walk(directory):
+                for filename in files:
+                    if filename.endswith(('.png', '.gif', '.jpg', '.jpeg', '.tiff', '.bmp')):
+                        file_names.append(os.path.join(root, filename))
+        except Exception as e: 
+            print(f"There was an error searching the directory, error: {e}")
+    else:
+        file_list = os.listdir(directory)
+        try:
+            # Get list of files and create dictionary 
+            file_names = [
+                os.path.join(directory, f) for f in file_list
+                if os.path.isfile(os.path.join(directory, f)) and f.lower().endswith(('.png', '.gif', '.jpg', '.jpeg', '.tiff', '.bmp'))
+            ]
+        except Exception as e: 
+            print(f"There was an error searching the directory, error: {e}")
+    
+    return file_names
 
 if __name__ == '__main__':
     main()

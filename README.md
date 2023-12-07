@@ -9,6 +9,12 @@ This algorithm works by:
 3. Calculate the average pixel value from the grayscale and shrunken image.
 4. Now compare each pixel's value to the average pixel value and assign a new binary value based on the comparison (0, 1) (True or False), etc...
 
+# Difference hashing
+This algorithm works by: 
+1. Convert the image to greyscale
+2. Resize the image to a smaller size
+3. Go through image's pixels horizontally and compute the difference between adjacent pixels (gradient). Note: (reduces row size by 1)
+
 # Hamming Distance
 The hamming distance is calculated by counting the number of positions in which symbols differ between two strings of equal length.
 

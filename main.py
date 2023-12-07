@@ -8,36 +8,10 @@ import itertools
 from collections import defaultdict
 import numpy as np
 from sys import getsizeof
-'''
-Hamming Distance - take two strings, compare differences. 
-Equal image = 0 count (differences between scaled down images).
-Usually around <5 indicates a duplicate/similar image but slightly modified. 
-
-
-Hamming Distance no hash, I still do hash, sort of.
-Convert image to grayscale, transforms down to 8x8, then compare.
-
-aHash - average hash. 
-Convert to grayscale, 8x8, average all pixel's colour,
-use this average to convert image to 0 and 1's (below or above average). 
-'''
-
-#Take a list of images
-#Maintain two lists of images
-#1st list - Original images and a list of resized images used in hamming distance
-#Resize the original images every time  and keep aspect ratio every time the user clicks on a row, to display it.
-#Hamming distance algorithm:
-#Convert to black and white
-#Resize to 30x30
-#Flatten the image. Optionally flatten it both row wise and column wise. 
-#
-#image = cv2.imread(args.file)
-#image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-#grayscale_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)  
-#Compare two image strings. If they are idential hamming distance is 0. 
-#If they differ by 1 value hamming distance is 1, etc... 
-
-#Makes more sense to have an original table then a seperate table for each algorithm.
+from PIL import Image
+#https://www.pysimplegui.org/en/latest/#image-element
+#Images can be placed in your window provide they are in PNG, GIF, PPM/PGM format. 
+#JPGs cannot be shown because tkinter does not naively support JPGs
 
 def define_window_layout():
     '''
@@ -83,12 +57,6 @@ def define_window_layout():
     #Update the main layout to include the combined layout
     layout = [
         [
-            sg.Text('Included Directories'),
-            sg.Button('Add', button_color=('white', 'green')),
-            sg.Button('Remove', button_color=('white', 'red')),
-            sg.Button('Manual Add')
-        ],
-        [
             sg.Text('Folders to Search'),
             sg.In(size=(25, 1), enable_events=True, key='-FOLDER-'),
             sg.FolderBrowse()
@@ -98,11 +66,11 @@ def define_window_layout():
         ],
         [
             sg.Text('Resize algorithm'),
-            sg.Combo(['Hamming Distance No Hash', 'Hamming Distance',], default_value='Hamming Distance No Hash', key='-RESIZE-'),
-            sg.Text('Hash size'),
-            sg.Spin([i for i in range(1, 33)], initial_value=8, key='-HASHSIZE-'),
+            sg.Combo(['Hamming Distance'], default_value='Hamming Distance', key='-RESIZE-'),
+            #sg.Text('Hash size'),
+            #sg.Spin([i for i in range(1, 33)], initial_value=8, key='-HASHSIZE-'),
             sg.Text('Hash type'),
-            sg.Combo(['aHash', 'pHash', 'dHash'], default_value='Gradient', key='-HASHTYPE-'),
+            sg.Combo(['No Hash', 'Average Hash', 'Difference Hash'], default_value='No Hash', key='-HASHTYPE-'),
             sg.Checkbox('Search Directories Recursively', default=False, key='-RECURSIVE-'),
             sg.Button('Run Algorithm', expand_x=True),
         ],
@@ -112,9 +80,7 @@ def define_window_layout():
         ],
         combined_layout,  #Insert the combined layout here
         [
-            sg.Button('Search', expand_x=True), sg.Button('Select', expand_x=True),
-            sg.Button('Sort', expand_x=True), sg.Button('Compare', expand_x=True),
-            sg.Button('Delete', expand_x=True), sg.Button('Move', expand_x=True),
+            sg.Button('Search', expand_x=True), sg.Button('Compare', expand_x=True)
         ]
     ]
 
@@ -149,6 +115,7 @@ def get_image_data(file_path, max_size=(400, 300)):
     :param max_size: The maximum size of an image to return.
     :return: The binary contents of the image, PNG file.
     '''
+    print(file_path)
     try: 
         img = Image.open(file_path) #Opens file, doesn't load into memory, returns ~PIL.Image.Image
         img.thumbnail(max_size)
@@ -256,6 +223,93 @@ def remove_all_files(path):
    except Exception as e:
      print(f"Error occurred while deleting files, Error: {e}")
 
+#Reduce to 9x8, convert to grayscale, left right pixel, 1 if brighter, 0 if not. output 8x8. 
+def difference_hashing(image_dictionary):
+    image_dict_differenced = {}
+    for key, value in image_dictionary.items():
+        temp = np.empty((8,8))
+        row, col = value.shape
+        for i in range(0, row):
+            for j in range(0,col-1):
+                print(f'i:{i}, j:{j}')
+                if value[i][j] > value[i][j+1]:
+                    temp[i][j] = 1
+                else: temp[i][j] = 0
+        image_dict_differenced[key] = temp
+
+    return image_dict_differenced
+
+#unfortunate
+def show_image_popup(image1_path, image2_path, image3_path=''):
+    if image3_path:
+        # Get folder names
+        titles = []
+        temp = [PurePath(image1_path), PurePath(image2_path), PurePath(image3_path)]
+        for name in temp:
+            temp_parts = list(name.parts)
+            titles.append(temp_parts[-2])
+
+        # Define the layout for the popup
+        layout = [
+            [sg.Column([
+                [sg.Text(titles[0], justification='center')],
+                [sg.Image(str(image1_path), key='-IMAGE1-')]
+            ]),
+            sg.VSeparator(),
+            sg.Column([
+                [sg.Text(titles[1], justification='center')],
+                [sg.Image(str(image2_path), key='-IMAGE2-')]
+            ]),
+            sg.VSeparator(),
+            sg.Column([
+                [sg.Text(titles[2], justification='center')],
+                [sg.Image(str(image3_path), key='-IMAGE3-')]
+            ])]
+        ]
+        # Show the popup with custom layout
+        sg.Window(layout=layout, title="Compare Images", modal=True).read(close=True)
+    else:
+        # Get folder names
+        titles = []
+        temp = [PurePath(image1_path), PurePath(image2_path)]
+        for name in temp:
+            temp_parts = list(name.parts)
+            titles.append(temp_parts[-2])
+
+        # Define the layout for the popup
+        layout = [
+            [sg.Column([
+                [sg.Text(titles[0], justification='center')],
+                [sg.Image(str(image1_path), key='-IMAGE1-')]
+            ]),
+            sg.VSeparator(),
+            sg.Column([
+                [sg.Text(titles[1], justification='center')],
+                [sg.Image(str(image2_path), key='-IMAGE2-')]
+            ])]
+        ]
+        # Show the popup with custom layout
+        sg.Window(layout=layout, title="Compare Images", modal=True).read(close=True)
+
+def compare_images(window, values):
+    list_of_image_filenames = []
+
+    for tree_number in range(1,5):
+        index = values[f'-TREE{tree_number}-']
+        for i in index: 
+            list_of_image_filenames.append(window.Element(f"-TREE{tree_number}-").TreeData.tree_dict[i].values[2])
+        if len(list_of_image_filenames) >= 3:
+            break
+    
+    if len(list_of_image_filenames) < 2:
+        sg.popup_error("Please select two or three images to compare!")
+        return
+    #If the user selected more than 3 images, remove the excess
+    fnames = list_of_image_filenames[0:3]
+
+    if len(fnames) == 2: show_image_popup(fnames[0], fnames[1])
+    else: show_image_popup(fnames[0], fnames[1], fnames[2])  
+
 def main():
     hash_size = 8
     window = define_window_layout()
@@ -286,22 +340,25 @@ def main():
         elif event == '-TREE4-':
             load_image(4)
 
+        elif event == 'Compare': 
+            compare_images(window, values)
+
         elif event == 'Clear Intermediate Tabs':
             for i in range(2,5):
                 window[f'-TREE{i}-'].update(values=sg.TreeData())
             remove_all_files("./resized-8x8")
-            remove_all_files("./average_hash-8x8")
+            remove_all_files("./hash-8x8")
         elif event == 'Clear All Tabs':
             for i in range(1,5):
                 window[f'-TREE{i}-'].update(values=sg.TreeData())
             image_file_names = {}
             remove_all_files("./resized-8x8")
-            remove_all_files("./average_hash-8x8")
+            remove_all_files("./hash-8x8")
 
         elif event == 'Run Algorithm':
-            algorithm = values['-RESIZE-']
+            hash_type = values['-HASHTYPE-']
             if image_file_names:
-                if algorithm == 'Hamming Distance No Hash':
+                if hash_type == 'No Hash':
                     black_white_resized_images = black_white_resize_images(image_file_names)
                     
                     #Save the resized black and white images, then display them in a tab
@@ -314,7 +371,7 @@ def main():
                     tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
                     window['-TREE4-'].update(values=tree_data_2)
 
-                elif algorithm == "Hamming Distance":
+                elif hash_type == "Average Hash":
                     black_white_resized_images = black_white_resize_images(image_file_names)
                     
                     #Save the resized black and white images, then display them in a tab
@@ -326,11 +383,33 @@ def main():
 
                     new_temp_rounded_dict = {k:(np.uint8(v) * 255).reshape((hash_size,hash_size)) for k, v in images_averaged_hash_dict.items()}
                     #Save the averaged hash images, then display them in a tab
-                    save_image_folder(new_temp_rounded_dict, '/average_hash-8x8')
-                    tree_data_1 = prepare_image_dict_for_tree(new_temp_rounded_dict, 'average_hash-8x8')
+                    save_image_folder(new_temp_rounded_dict, '/hash-8x8')
+                    tree_data_1 = prepare_image_dict_for_tree(new_temp_rounded_dict, 'hash-8x8')
                     window['-TREE3-'].update(values=tree_data_1)
 
                     dict_list = hamming_distance_naive(images_averaged_hash_dict)
+                    print(dict_list)
+                    tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
+                    print(f"TreeLdata: {tree_data_2}")
+                    window['-TREE4-'].update(values=tree_data_2)
+                
+                elif hash_type == "Difference Hash":
+                    black_white_resized_images = black_white_resize_images(image_file_names)
+                    
+                    #Save the resized black and white images, then display them in a tab
+                    save_image_folder(black_white_resized_images, '/resized-8x8')
+                    tree_data = prepare_image_dict_for_tree(black_white_resized_images, 'resized-8x8')
+                    window['-TREE2-'].update(values=tree_data)
+                    
+                    images_difference_hash_dict = difference_hashing(black_white_resized_images)
+
+                    new_temp_rounded_dict = {k:(np.uint8(v) * 255) for k, v in images_difference_hash_dict.items()}
+                    #Save the averaged hash images, then display them in a tab
+                    save_image_folder(new_temp_rounded_dict, '/hash-8x8')
+                    tree_data_1 = prepare_image_dict_for_tree(new_temp_rounded_dict, 'hash-8x8')
+                    window['-TREE3-'].update(values=tree_data_1)
+
+                    dict_list = hamming_distance_naive(images_difference_hash_dict)
                     print(dict_list)
                     tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
                     print(f"TreeLdata: {tree_data_2}")
@@ -395,6 +474,9 @@ def prepare_image_dict_for_tree(image_dictionary, insert_directory='', spacing=F
                 index += 1
     return tree_data
 
+#https://www.pysimplegui.org/en/latest/#image-element
+#"Images can be placed in your window provide they are in PNG, GIF, PPM/PGM format. 
+#JPGs cannot be shown because tkinter does not naively support JPGs"
 def search_directory(directory, recursive):
     '''
     search_directory Gets the absolute path of all picture files given a directory, recursively or not. 
@@ -411,7 +493,14 @@ def search_directory(directory, recursive):
         try:
             for root, dirnames, files in os.walk(directory):
                 for filename in files:
-                    if filename.endswith(('.png', '.gif', '.jpg', '.jpeg', '.tiff', '.bmp')):
+                    if filename.lower().endswith(('.jpg', '.jpeg')):
+                        filename_path = os.path.join(root, filename)
+                        im = Image.open(filename_path)
+                        filename_png = Path(filename_path).with_suffix('.png')
+                        im.convert("RGB").save(filename_png, "PNG")
+                        file_names.append(str(filename_png))
+
+                    elif filename.lower().endswith(('.png')):
                         file_names.append(os.path.join(root, filename))
         except Exception as e: 
             print(f"There was an error searching the directory, error: {e}")
@@ -419,13 +508,20 @@ def search_directory(directory, recursive):
         try:
             file_list = os.listdir(directory)
             # Get list of files and create dictionary 
-            file_names = [
-                os.path.join(directory, f) for f in file_list
-                if os.path.isfile(os.path.join(directory, f)) and f.lower().endswith(('.png', '.gif', '.jpg', '.jpeg', '.tiff', '.bmp'))
-            ]
+            file_names = []
+            for f in file_list:
+                if f.lower().endswith(('.png')):
+                    file_names.append(os.path.join(directory, f))
+
+                elif f.lower().endswith(('.jpg', '.jpeg')):
+                        filename_path = os.path.join(directory, f)
+                        im = Image.open(filename_path)
+                        filename_png = Path(filename_path).with_suffix('.png')
+                        im.convert("RGB").save(filename_png, "PNG")
+                        file_names.append(str(filename_png))
         except Exception as e: 
             print(f"There was an error searching the directory, error: {e}")
-    
+    print(file_names)
     return file_names
 
 if __name__ == '__main__':

@@ -67,8 +67,6 @@ def define_window_layout():
         [
             sg.Text('Resize algorithm'),
             sg.Combo(['Hamming Distance'], default_value='Hamming Distance', key='-RESIZE-'),
-            #sg.Text('Hash size'),
-            #sg.Spin([i for i in range(1, 33)], initial_value=8, key='-HASHSIZE-'),
             sg.Text('Hash type'),
             sg.Combo(['No Hash', 'Average Hash', 'Difference Hash'], default_value='No Hash', key='-HASHTYPE-'),
             sg.Checkbox('Search Directories Recursively', default=False, key='-RECURSIVE-'),
@@ -78,7 +76,7 @@ def define_window_layout():
             sg.Button('Clear Intermediate Tabs', ),
             sg.Button('Clear All Tabs')
         ],
-        combined_layout,  #Insert the combined layout here
+        combined_layout,
         [
             sg.Button('Search', expand_x=True), sg.Button('Compare', expand_x=True)
         ]
@@ -115,7 +113,6 @@ def get_image_data(file_path, max_size=(400, 300)):
     :param max_size: The maximum size of an image to return.
     :return: The binary contents of the image, PNG file.
     '''
-    print(file_path)
     try: 
         img = Image.open(file_path) #Opens file, doesn't load into memory, returns ~PIL.Image.Image
         img.thumbnail(max_size)
@@ -161,8 +158,6 @@ def hamming_distance(image, image1):
     :param image1: The second image
     :return: The hamming distance (a integer that represents how many differences were found in the list)
     '''
-    print(f'Length: {len(image)}')
-    print(f'Length1: {len(image1)}')
     count = sum(1 for a, b in zip(image, image1) if a != b)
     return count
 
@@ -231,7 +226,6 @@ def difference_hashing(image_dictionary):
         row, col = value.shape
         for i in range(0, row):
             for j in range(0,col-1):
-                print(f'i:{i}, j:{j}')
                 if value[i][j] > value[i][j+1]:
                     temp[i][j] = 1
                 else: temp[i][j] = 0
@@ -323,7 +317,6 @@ def main():
         def load_image(tree_number):
             try:
                 selected_file = window.Element(f'-TREE{tree_number}-').SelectedRows[0] #Get the index of the selected row
-                print(f'4: {window.Element(f"-TREE{tree_number}-").TreeData.tree_dict[selected_file].values[2]}') 
                 full_filename_path = window.Element(f"-TREE{tree_number}-").TreeData.tree_dict[selected_file].values[2] #Text property of row index
                 path = Path(full_filename_path)
                 image_data = get_image_data(path)
@@ -412,7 +405,7 @@ def main():
                     dict_list = hamming_distance_naive(images_difference_hash_dict)
                     print(dict_list)
                     tree_data_2 = prepare_image_dict_for_tree(dict_list, '', spacing=True)
-                    print(f"TreeLdata: {tree_data_2}")
+                    #print(f"TreeLdata: {tree_data_2}")
                     window['-TREE4-'].update(values=tree_data_2)
                     
             else: 
@@ -435,24 +428,19 @@ def main():
 
 def prepare_image_dict_for_tree(image_dictionary, insert_directory='', spacing=False):
     #Prepare data for the tree
-    print(insert_directory)
     tree_data = sg.TreeData()
     #...:( 
     if insert_directory:
         for index, (key, value) in enumerate(image_dictionary.items()):
-            print(key)
             temp = PurePath(key)
             temp_parts = list(temp.parts)
-            print(temp_parts)
 
             temp_parts.insert(-1, insert_directory)
             new_path = PurePath('').joinpath(*temp_parts)
-            print(new_path)
             tree_data.insert('', index, '', values=[getsizeof(value), f'{value.shape[:1]} x {value.shape[1:2]}', new_path])        
     else:
         index = 0
         for key, value in image_dictionary.items():
-            print(f"key: {key}, value: {value}")
             #in this case image_dictionary is defaultdict. key=filename, value=filename list. 
             if type(value) == list and spacing==True:
                 #First row is the key (image used to compare against others)
@@ -521,7 +509,7 @@ def search_directory(directory, recursive):
                         file_names.append(str(filename_png))
         except Exception as e: 
             print(f"There was an error searching the directory, error: {e}")
-    print(file_names)
+    print(f"Searched the {directory} and found\n: {file_names}")
     return file_names
 
 if __name__ == '__main__':
